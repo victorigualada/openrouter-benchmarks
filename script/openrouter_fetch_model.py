@@ -167,8 +167,12 @@ def _build_model_yaml(model_id: str, model_slug: str, model_entry: dict[str, Any
 
     in_cost, out_cost = _extract_cost_per_million_tokens(endpoint)
 
-    # Minimal schema consistent with existing `models/*.yaml` files in this repo.
-    # We intentionally do not print anything to stdout on success.
+    # Model config schema used by `home-assistant-datasets` when running pytest:
+    # - `config_entry_data` provisions the OpenRouter integration config entry
+    # - `subentries_data` provisions the OpenRouter conversation + ai_task entities
+    #
+    # This is required on newer Home Assistant versions, where OpenRouter agents
+    # are configured via config subentries (not config entry options).
     lines: list[str] = [
         "---",
         f"model_id: {model_id}",
@@ -181,9 +185,19 @@ def _build_model_yaml(model_id: str, model_slug: str, model_entry: dict[str, Any
         f"  - https://openrouter.ai/{model_slug}",
         "config_entry_data:",
         "  api_key: !secret openrouter_api_key",
-        "config_entry_options:",
-        f"  chat_model: {model_slug}",
-        "  llm_hass_api: assist",
+        "subentries_data:",
+        "  - subentry_type: conversation",
+        "    title: Mock Title",
+        "    unique_id: null",
+        "    data:",
+        f"      model: {model_slug}",
+        "      llm_hass_api:",
+        "        - assist",
+        "  - subentry_type: ai_task_data",
+        "    title: Mock Title",
+        "    unique_id: null",
+        "    data:",
+        f"      model: {model_slug}",
         f"rpm: {rpm}",
     ]
 
