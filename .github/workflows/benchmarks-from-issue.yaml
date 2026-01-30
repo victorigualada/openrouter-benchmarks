@@ -235,28 +235,7 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           set -euo pipefail
-          if [ -z "${OPENROUTER_API_KEY}" ]; then
-            echo "Missing required GitHub secret: OPENROUTER_API_KEY"
-            echo "Set it in the repository's Actions secrets and re-run."
-            exit 1
-          fi
-
           printf 'openrouter_api_key: "%s"' "$OPENROUTER_API_KEY" > "${RUNNER_TEMP}/secrets.yaml"
-
-          python3 - <<'PY'
-          import os
-          import yaml
-
-          secrets_path = os.path.join(os.environ["RUNNER_TEMP"], "secrets.yaml")
-          with open(secrets_path, "r", encoding="utf-8") as f:
-              data = yaml.safe_load(f) or {}
-
-          key = (data.get("openrouter_api_key") or "").strip()
-          if not key:
-              raise SystemExit(f"secrets.yaml written but openrouter_api_key missing/empty: {secrets_path}")
-
-          print("secrets.yaml OK (openrouter_api_key present)")
-          PY
 
       - name: Generate model YAMLs from OpenRouter
         env:
@@ -270,13 +249,6 @@ jobs:
           python3 "${GITHUB_WORKSPACE}/script/openrouter_fetch_model.py" \
             --models-dir "${GITHUB_WORKSPACE}/${{ env.DATASETS_DIR }}/models" \
             "${MODEL_SLUG}"
-
-          if [ ! -f "models/${MODEL_ID}.yaml" ]; then
-            echo "Expected model config not found: models/${MODEL_ID}.yaml"
-            echo "models/ directory listing:"
-            ls -la models || true
-            exit 1
-          fi
 
       - name: Run collection (all datasets)
         id: collect
@@ -326,12 +298,6 @@ jobs:
           BRANCH="${{ steps.branch.outputs.branch }}"
           REPO="${{ env.DATASETS_REPO }}"
 
-          if [ -z "${GH_TOKEN:-}" ]; then
-            echo "Missing required secret: HOME_ASSISTANT_DATASETS_TOKEN"
-            echo "This workflow runs benchmarks in '${REPO}', and needs a token with write access to push branches and open PRs there."
-            exit 1
-          fi
-
           cd "${{ env.DATASETS_DIR }}"
           git status --porcelain
           git add models/*.yaml reports/** || true
@@ -371,76 +337,7 @@ jobs:
           CREATE_PR_URL="https://github.com/${UPSTREAM_REPO}/compare/${BASE_BRANCH}...${ORIGIN_OWNER}:${BRANCH}?expand=1"
 
           REPORTS_README="${{ env.DATASETS_DIR }}/reports/README.md"
-          MODEL_ROW="$(python3 - <<'PY'
-          import os
-          import re
-          import sys
-
-          path = os.environ.get("REPORTS_README", "")
-          model_id = (os.environ.get("MODEL_ID") or "").strip()
-          model_slug = (os.environ.get("MODEL_SLUG") or "").strip()
-
-          if not path or not os.path.exists(path) or (not model_id and not model_slug):
-              sys.exit(0)
-
-          with open(path, "r", encoding="utf-8") as f:
-              lines = f.read().splitlines()
-
-          def is_table_line(s: str) -> bool:
-              return "|" in s and s.strip() and not s.strip().startswith("<!--")
-
-          def is_separator(s: str) -> bool:
-              # A typical markdown table separator line: | --- | ---: |
-              s = s.strip()
-              if "|" not in s:
-                  return False
-              return bool(re.fullmatch(r"[|\s:\-]+", s))
-
-          last_header = None
-          last_sep = None
-
-          for i, line in enumerate(lines):
-              if is_table_line(line):
-                  if last_header is None:
-                      last_header = line
-                  elif last_sep is None and is_separator(line):
-                      last_sep = line
-
-              hay = line
-              if model_id and model_id in hay and is_table_line(hay) and not is_separator(hay):
-                  # Prefer header/separator immediately above when possible.
-                  hdr = None
-                  sep = None
-                  if i >= 2 and is_table_line(lines[i - 2]) and is_table_line(lines[i - 1]) and is_separator(lines[i - 1]):
-                      hdr = lines[i - 2]
-                      sep = lines[i - 1]
-                  elif last_header and last_sep:
-                      hdr = last_header
-                      sep = last_sep
-                  if hdr and sep:
-                      print("\n".join([hdr, sep, line]).strip())
-                  else:
-                      print(line.strip())
-                  sys.exit(0)
-
-              if model_slug and model_slug in hay and is_table_line(hay) and not is_separator(hay):
-                  hdr = None
-                  sep = None
-                  if i >= 2 and is_table_line(lines[i - 2]) and is_table_line(lines[i - 1]) and is_separator(lines[i - 1]):
-                      hdr = lines[i - 2]
-                      sep = lines[i - 1]
-                  elif last_header and last_sep:
-                      hdr = last_header
-                      sep = last_sep
-                  if hdr and sep:
-                      print("\n".join([hdr, sep, line]).strip())
-                  else:
-                      print(line.strip())
-                  sys.exit(0)
-
-          # No match found: print nothing
-          PY
-          )"
+          REPORT_ROW="$(grep -m 1 -F "${MODEL_ID}" "${REPORTS_README}" || true)"
 
           gh issue comment "$ISSUE_NUMBER" -R "$REPO" --body "$(
             cat <<EOF
@@ -448,13 +345,14 @@ jobs:
 
           - **Branch**: [\`${BRANCH}\`](${BRANCH_URL})
           - **Create PR into** \`${UPSTREAM_REPO}\`: [Open a pull request](${CREATE_PR_URL})
-
-          $(if [ -n "${MODEL_ROW}" ]; then
+          $(if [ -n "${REPORT_TABLE}" ]; then
             cat <<EOF2
 
           **Benchmark results**
 
-          ${MODEL_ROW}
+          | Model | assist \$\${\\color{gray}\\small{\\textsf{(n=460)}}}\$\$ | assist-mini \$\${\\color{gray}\\small{\\textsf{(n=196)}}}\$\$ | questions \$\${\\color{gray}\\small{\\textsf{(n=370)}}}\$\$ | automations \$\${\\color{gray}\\small{\\textsf{(n=60)}}}\$\$ |
+          | --- | --- | --- | --- | --- |
+          ${REPORT_TABLE}
           EOF2
           fi)
           EOF
