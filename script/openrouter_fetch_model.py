@@ -190,12 +190,12 @@ def _build_model_yaml(model_id: str, model_slug: str, model_entry: dict[str, Any
         "    title: Mock Title",
         "    data:",
         f"      model: {model_slug}",
-        "       llm_hass_api: assist",
+        "      llm_hass_api: assist",
         "  - subentry_type: ai_task_data",
         "    title: Mock Title",
         "    data:",
         f"      model: {model_slug}",
-        "       llm_hass_api: assist",
+        "      llm_hass_api: assist",
         f"rpm: {rpm}",
     ]
 
