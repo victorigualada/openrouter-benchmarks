@@ -289,7 +289,7 @@ jobs:
         run: |
           set -euo pipefail
           ./script/eval_collect_automations.sh
-          ./script/eval_collect_all_datasets.sh
+        #./script/eval_collect_all_datasets.sh
           
 
       - name: Run metrics (assist family + automations)
@@ -302,9 +302,9 @@ jobs:
         run: |
           set -euo pipefail
           ./script/eval_metrics_automations.sh
-          DATASET_NAME=assist ./script/eval_metrics_assist.sh
-          DATASET_NAME=assist-mini ./script/eval_metrics_assist.sh
-          DATASET_NAME=questions ./script/eval_metrics_assist.sh
+        # DATASET_NAME=assist ./script/eval_metrics_assist.sh
+        # DATASET_NAME=assist-mini ./script/eval_metrics_assist.sh
+        # DATASET_NAME=questions ./script/eval_metrics_assist.sh
 
       - name: Build leaderboard
         id: leaderboard
