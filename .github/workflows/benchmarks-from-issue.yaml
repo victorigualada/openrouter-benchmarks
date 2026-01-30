@@ -186,10 +186,9 @@ jobs:
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
-          ISSUE_NUMBER="${{ github.event.issue.number }}"
 
           TS="$(date -u +%Y%m%d%H%M%S)"
-          BRANCH="bench/issue-${ISSUE_NUMBER}-${TS}"
+          BRANCH="benchmark/${MODEL_SLUG}-${TS}"
           echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
 
           git checkout -b "${BRANCH}"
