@@ -300,10 +300,10 @@ jobs:
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
-          DATASET_NAME=assist ./script/eval_metrics_assist.sh
-          DATASET_NAME=assist-mini ./script/eval_metrics_assist.sh
-          DATASET_NAME=questions ./script/eval_metrics_assist.sh
           ./script/eval_metrics_automations.sh
+        # DATASET_NAME=assist ./script/eval_metrics_assist.sh
+        # DATASET_NAME=assist-mini ./script/eval_metrics_assist.sh
+        # DATASET_NAME=questions ./script/eval_metrics_assist.sh
 
       - name: Build leaderboard
         working-directory: ${{ env.DATASETS_DIR }}
