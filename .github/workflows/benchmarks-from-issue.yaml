@@ -210,6 +210,24 @@ jobs:
           uv pip install -r requirements_dev.txt --prerelease=allow
           uv pip install -r requirements_eval.txt --prerelease=allow
 
+      - name: Ensure OpenRouter integration deps present
+        working-directory: ${{ env.DATASETS_DIR }}
+        run: |
+          set -euo pipefail
+          # Home Assistant integrations declare `requirements` in their manifest, but in
+          # this benchmark environment we don't rely on HA dynamically installing them.
+          # The OpenRouter integration's config flow imports `python_open_router`.
+          uv pip install "python-open-router==0.3.3"
+
+          python3 - <<'PY'
+          import importlib
+          import homeassistant
+          print("homeassistant", homeassistant.__version__)
+          importlib.import_module("python_open_router")
+          importlib.import_module("homeassistant.components.open_router.config_flow")
+          print("open_router config_flow import: OK")
+          PY
+
       - name: Prepare allenporter/home-assistant-synthetic-home
         uses: actions/checkout@v4
         with:
