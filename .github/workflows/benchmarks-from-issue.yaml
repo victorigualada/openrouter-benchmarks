@@ -281,6 +281,8 @@ jobs:
           fi
 
       - name: Run collection (all datasets)
+        id: collect
+        continue-on-error: true
         env:
           SYNTHETIC_HOME_DIR: ${{ github.workspace }}/home-assistant-synthetic-home/
           SECRETS_FILE: ${{ runner.temp }}/secrets.yaml
@@ -294,6 +296,8 @@ jobs:
           
 
       - name: Run metrics (assist family + automations)
+        id: metrics
+        continue-on-error: true
         env:
           SYNTHETIC_HOME_DIR: ${{ github.workspace }}/home-assistant-synthetic-home/
           SECRETS_FILE: ${{ runner.temp }}/secrets.yaml
@@ -306,6 +310,8 @@ jobs:
         # DATASET_NAME=questions ./script/eval_metrics_assist.sh
 
       - name: Build leaderboard
+        id: leaderboard
+        continue-on-error: true
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
@@ -362,11 +368,25 @@ jobs:
 
           Requested model:
           - ${MODEL_SLUG}
+
+          Run status:
+          - collect: ${{ steps.collect.outcome }}
+          - metrics: ${{ steps.metrics.outcome }}
+          - leaderboard: ${{ steps.leaderboard.outcome }}
           EOF
             )")"
 
           gh pr comment "$PR_URL" -R "$REPO" --body "Pushed benchmark results. Ready for review."
-          gh issue comment "$ISSUE_NUMBER" -R "${{ github.repository }}" --body "Benchmark run finished. Results PR: ${PR_URL}"
+          gh issue comment "$ISSUE_NUMBER" -R "${{ github.repository }}" --body "$(
+            cat <<EOF
+          Benchmark run finished. Results PR: ${PR_URL}
+
+          Run status:
+          - collect: ${{ steps.collect.outcome }}
+          - metrics: ${{ steps.metrics.outcome }}
+          - leaderboard: ${{ steps.leaderboard.outcome }}
+          EOF
+          )"
 
       - name: Notify nothing produced
         if: steps.commit.outputs.has_changes == '0'
