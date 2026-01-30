@@ -349,6 +349,35 @@ jobs:
 
           echo "has_changes=1" >> "$GITHUB_OUTPUT"
 
+      - name: Comment PR link
+        if: steps.commit.outputs.has_changes == '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+          REPO="${{ github.repository }}"
+
+          ORIGIN_REPO="${{ env.DATASETS_REPO }}"
+          UPSTREAM_REPO="${{ env.UPSTREAM_REPO }}"
+          BRANCH="${{ steps.branch.outputs.branch }}"
+          MODEL_SLUG="${{ steps.model.outputs.model_slug }}"
+
+          ORIGIN_OWNER="${ORIGIN_REPO%%/*}"
+          BASE_BRANCH="$(gh repo view "${UPSTREAM_REPO}" --json defaultBranchRef -q .defaultBranchRef.name)"
+
+          BRANCH_URL="https://github.com/${ORIGIN_REPO}/tree/${BRANCH}"
+          CREATE_PR_URL="https://github.com/${UPSTREAM_REPO}/compare/${BASE_BRANCH}...${ORIGIN_OWNER}:${BRANCH}?expand=1"
+
+          gh issue comment "$ISSUE_NUMBER" -R "$REPO" --body "$(
+            cat <<EOF
+          ✅ Benchmark results for \`${MODEL_SLUG}\` were pushed.
+
+          - **Branch**: [\`${BRANCH}\`](${BRANCH_URL})
+          - **Create PR into** \`${UPSTREAM_REPO}\`: [Open a pull request](${CREATE_PR_URL})
+          EOF
+          )"
+
       - name: Notify nothing produced
         if: steps.commit.outputs.has_changes == '0'
         env:
