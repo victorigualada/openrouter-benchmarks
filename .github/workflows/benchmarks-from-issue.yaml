@@ -38,8 +38,6 @@ jobs:
           repository: ${{ env.DATASETS_REPO }}
           path: ${{ env.DATASETS_DIR }}
           fetch-depth: 0
-          # Required for pushing branches + creating PRs in a different repo.
-          # Create a fine-grained PAT with Contents/PR write on DATASETS_REPO.
           token: ${{ secrets.HOME_ASSISTANT_DATASETS_TOKEN || github.token }}
 
       - name: Authorize request
@@ -346,7 +344,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git commit -m "Benchmark: issue #${ISSUE_NUMBER} (OpenRouter)"
+          git commit -m "Benchmark: ${MODEL_SLUG} (OpenRouter)"
           git push -u origin "${BRANCH}"
 
           echo "has_changes=1" >> "$GITHUB_OUTPUT"
