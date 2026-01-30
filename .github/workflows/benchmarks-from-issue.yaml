@@ -345,7 +345,7 @@ jobs:
 
           - **Branch**: [\`${BRANCH}\`](${BRANCH_URL})
           - **Create PR into** \`${UPSTREAM_REPO}\`: [Open a pull request](${CREATE_PR_URL})
-          $(if [ -n "${REPORT_TABLE}" ]; then
+          $(if [ -n "${REPORT_ROW}" ]; then
             cat <<EOF2
 
           **Benchmark results**
