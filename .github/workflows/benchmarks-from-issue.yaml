@@ -312,6 +312,8 @@ jobs:
       - name: Build leaderboard
         id: leaderboard
         continue-on-error: true
+        env:
+          SECRETS_FILE: ${{ runner.temp }}/secrets.yaml
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
@@ -353,14 +355,14 @@ jobs:
       - name: Create PR and notify
         if: steps.commit.outputs.has_changes == '1'
         env:
-          GH_TOKEN: ${{ secrets.HOME_ASSISTANT_DATASETS_TOKEN }}
+          GH_TOKEN_DATASETS: ${{ secrets.HOME_ASSISTANT_DATASETS_TOKEN }}
         run: |
           set -euo pipefail
           ISSUE_NUMBER="${{ github.event.issue.number }}"
           REPO="${{ env.DATASETS_REPO }}"
           BRANCH="${{ steps.branch.outputs.branch }}"
 
-          PR_URL="$(gh pr create -R "$REPO" --base main --head "${BRANCH}" \
+          PR_URL="$(GH_TOKEN="$GH_TOKEN_DATASETS" gh pr create -R "$REPO" --base main --head "${BRANCH}" \
             --title "Benchmark: issue #${ISSUE_NUMBER} (OpenRouter)" \
             --body "$(
               cat <<EOF
@@ -376,7 +378,8 @@ jobs:
           EOF
             )")"
 
-          gh pr comment "$PR_URL" -R "$REPO" --body "Pushed benchmark results. Ready for review."
+          GH_TOKEN="$GH_TOKEN_DATASETS" gh pr comment "$PR_URL" -R "$REPO" --body "Pushed benchmark results. Ready for review."
+
           gh issue comment "$ISSUE_NUMBER" -R "${{ github.repository }}" --body "$(
             cat <<EOF
           Benchmark run finished. Results PR: ${PR_URL}
