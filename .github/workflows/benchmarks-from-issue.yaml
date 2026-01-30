@@ -301,8 +301,9 @@ jobs:
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
-          ./script/eval_collect_all_datasets.sh
-          ./script/eval_collect_automations.sh
+          DATASET_NAME=questions ./script/eval_collect_assist.sh
+        #./script/eval_collect_all_datasets.sh
+        #./script/eval_collect_automations.sh
 
       - name: Run metrics (assist family + automations)
         env:
