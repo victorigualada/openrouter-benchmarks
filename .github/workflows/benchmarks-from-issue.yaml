@@ -19,7 +19,6 @@ env:
   DATASETS_REPO: victorigualada/home-assistant-datasets
   DATASETS_DIR: home-assistant-datasets
   UPSTREAM_REPO: allenporter/home-assistant-datasets
-  FORK_OWNER: victorigualada
 
 jobs:
   run:
@@ -352,39 +351,6 @@ jobs:
           git push -u origin "${BRANCH}"
 
           echo "has_changes=1" >> "$GITHUB_OUTPUT"
-
-      - name: Create PR and notify
-        if: steps.commit.outputs.has_changes == '1'
-        env:
-          GH_TOKEN_DATASETS: ${{ secrets.HOME_ASSISTANT_DATASETS_TOKEN }}
-        run: |
-          set -euo pipefail
-          ISSUE_NUMBER="${{ github.event.issue.number }}"
-          REPO="${{ env.UPSTREAM_REPO }}"
-          BRANCH="${{ steps.branch.outputs.branch }}"
-
-          PR_URL="$(GH_TOKEN="$GH_TOKEN_DATASETS" gh pr create -R "$REPO" --base main --head "${{ env.FORK_OWNER }}:${BRANCH}" \
-            --title "Benchmark: ${MODEL_SLUG} (OpenRouter)" \
-            --body "$(
-              cat <<EOF
-          Benchmarked model:
-          - ${MODEL_SLUG}
-          EOF
-            )")"
-
-
-          GH_TOKEN="$GH_TOKEN_DATASETS" gh pr comment "$PR_URL" -R "$REPO" --body "Pushed benchmark results. Ready for review." || true
-
-          GH_TOKEN="${{ github.token }}" gh issue comment "$ISSUE_NUMBER" -R "${{ github.repository }}" --body "$(
-            cat <<EOF
-          Benchmark run finished. Results PR: ${PR_URL}
-
-          Run status:
-          - collect: ${{ steps.collect.outcome }}
-          - metrics: ${{ steps.metrics.outcome }}
-          - leaderboard: ${{ steps.leaderboard.outcome }}
-          EOF
-          )"
 
       - name: Notify nothing produced
         if: steps.commit.outputs.has_changes == '0'
