@@ -208,6 +208,15 @@ def main(argv: list[str]) -> int:
         )
     )
     parser.add_argument(
+        "--models-dir",
+        dest="models_dir",
+        default=None,
+        help=(
+            "Directory to write the generated YAML into. "
+            "Defaults to '<repo_root>/models' (repo root is derived from this script location)."
+        ),
+    )
+    parser.add_argument(
         "openrouter_model_url_or_slug",
         help="Example: https://openrouter.ai/deepseek/deepseek-v3.2 OR deepseek/deepseek-v3.2",
     )
@@ -231,8 +240,11 @@ def main(argv: list[str]) -> int:
             continue
         # Per requirement: match the exact slug from the model URL
         if entry.get("slug") == model_slug:
-            repo_root = Path(__file__).resolve().parents[1]
-            models_dir = repo_root / "models"
+            if args.models_dir:
+                models_dir = Path(args.models_dir).expanduser().resolve()
+            else:
+                repo_root = Path(__file__).resolve().parents[1]
+                models_dir = repo_root / "models"
             models_dir.mkdir(parents=True, exist_ok=True)
 
             out_path = models_dir / f"{model_id}.yaml"

@@ -264,7 +264,9 @@ jobs:
         run: |
           set -euo pipefail
           echo "Fetching model slug: ${MODEL_SLUG}"
-          python3 script/openrouter_fetch_model.py "${MODEL_SLUG}"
+          python3 "${GITHUB_WORKSPACE}/script/openrouter_fetch_model.py" \
+            --models-dir "${GITHUB_WORKSPACE}/${{ env.DATASETS_DIR }}/models" \
+            "${MODEL_SLUG}"
 
           if [ ! -f "models/${MODEL_ID}.yaml" ]; then
             echo "Expected model config not found: models/${MODEL_ID}.yaml"
