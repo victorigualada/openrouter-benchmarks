@@ -163,7 +163,7 @@ def _build_model_yaml(model_id: str, model_slug: str, model_entry: dict[str, Any
 
     rpm = endpoint.get("limit_rpm")
     if not isinstance(rpm, int) or rpm <= 0:
-        rpm = 20
+        rpm = 250
 
     in_cost, out_cost = _extract_cost_per_million_tokens(endpoint)
 
@@ -188,16 +188,14 @@ def _build_model_yaml(model_id: str, model_slug: str, model_entry: dict[str, Any
         "subentries_data:",
         "  - subentry_type: conversation",
         "    title: Mock Title",
-        "    unique_id: null",
         "    data:",
         f"      model: {model_slug}",
-        "      llm_hass_api:",
-        "        - assist",
+        "       llm_hass_api: assist",
         "  - subentry_type: ai_task_data",
         "    title: Mock Title",
-        "    unique_id: null",
         "    data:",
         f"      model: {model_slug}",
+        "       llm_hass_api: assist",
         f"rpm: {rpm}",
     ]
 
