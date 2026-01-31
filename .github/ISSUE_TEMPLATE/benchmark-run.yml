@@ -6,9 +6,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        <table border="0" cellspacing="0" cellpadding="0">
+        <table border="0" cellspacing="0" cellpadding="0" style="background: transparent;">
         <tr>
-        <td valign="top">
+        <td valign="middle">
         You can find the model slug in the <a href="https://openrouter.ai/models">OpenRouter site</a> and use the 📋 button to copy the model slug.
         </td>
         <td width="60%">
@@ -17,7 +17,6 @@ body:
         </tr>
         </table>
         
-        - Only org members/collaborators can trigger runs.
         - A workflow will validate this issue when the `run-benchmark` label is applied by a maintainer.
 
   - type: input
@@ -25,8 +24,7 @@ body:
     attributes:
       label: Model slug (OpenRouter)
       description: |
-        Required format:
-        - \<author\>/\<model\>
+        Required format: \<author\>/\<model\>
       placeholder: mistralai/mistral-large-2512
     validations:
       required: true
