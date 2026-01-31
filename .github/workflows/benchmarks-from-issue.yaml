@@ -241,6 +241,7 @@ jobs:
           bash ./script/${{ matrix.collect_script }}
 
       - name: Run metrics (${{ matrix.dataset }})
+        continue-on-error: true
         env:
           SYNTHETIC_HOME_DIR: ${{ github.workspace }}/home-assistant-synthetic-home/
           SECRETS_FILE: ${{ runner.temp }}/secrets.yaml
