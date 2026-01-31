@@ -324,17 +324,8 @@ jobs:
           set -euo pipefail
           
           for dir in reports-artifacts/reports-*/; do
-            echo "Processing: $dir"
-            if [ -d "${dir}${{ env.DATASETS_DIR }}/reports" ]; then
-              echo "Found reports at: ${dir}${{ env.DATASETS_DIR }}/reports"
-              cp -rv "${dir}${{ env.DATASETS_DIR }}/reports/"* "${{ env.DATASETS_DIR }}/reports/"
-            elif [ -d "${dir}reports" ]; then
-              echo "Found reports at: ${dir}reports"
-              cp -rv "${dir}reports/"* "${{ env.DATASETS_DIR }}/reports/"
-            else
-              echo "Looking for any reports structure..."
-              find "$dir" -name "reports" -type d
-            fi
+            echo "Copying reports from: $dir"
+            cp -rv "${dir}"* "${{ env.DATASETS_DIR }}/reports/"
           done
 
       - name: Install uv
