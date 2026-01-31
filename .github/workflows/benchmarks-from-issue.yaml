@@ -323,15 +323,13 @@ jobs:
         run: |
           set -euo pipefail
           
-          mkdir -p "${{ env.DATASETS_DIR }}/reports"
-          
           for dir in reports-artifacts/reports-*/; do
-            echo "Copying reports from: $dir"
-            cp -rv "${dir}"* "${{ env.DATASETS_DIR }}/reports/"
+            echo "Merging reports from: $dir"
+            rsync -av "${dir}" "${{ env.DATASETS_DIR }}/reports/"
           done
           
-          echo "=== Reports after merge ==="
-          find "${{ env.DATASETS_DIR }}/reports" -type f | head -20
+          echo "=== New reports after merge ==="
+          find "${{ env.DATASETS_DIR }}/reports" -name "*.yaml" -mmin -5 | head -20 || true
 
       - name: Install uv
         if: needs.collect-metrics.result == 'success'
