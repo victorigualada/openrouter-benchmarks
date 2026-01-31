@@ -11,8 +11,8 @@ body:
         <td valign="top">
         You can find the model slug in the <a href="https://openrouter.ai/models">OpenRouter site</a> and use the 📋 button to copy the model slug.
         </td>
-        <td>
-        <img src="https://raw.githubusercontent.com/victorigualada/openrouter-benchmarks/main/.github/assets/copy-model-slug.png" alt="Copy model slug" width="400">
+        <td width="60%">
+        <img src="https://raw.githubusercontent.com/victorigualada/openrouter-benchmarks/main/.github/assets/copy-model-slug.png" alt="Copy model slug" width="100%">
         </td>
         </tr>
         </table>
