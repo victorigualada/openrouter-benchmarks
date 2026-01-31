@@ -6,11 +6,11 @@ body:
   - type: markdown
     attributes:
       value: |
-        
-        Submit a benchmark request for a single OpenRouter model.
+        <br>
         You can find the model slug in the OpenRouter site: https://openrouter.ai/models
         
         And use the 📋 button to copy the model slug:
+        <br>
         ![Copy model slug](https://raw.githubusercontent.com/victorigualada/openrouter-benchmarks/main/.github/assets/copy-model-slug.png)
         
         - Only org members/collaborators can trigger runs.
