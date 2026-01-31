@@ -21,10 +21,17 @@ env:
   UPSTREAM_REPO: allenporter/home-assistant-datasets
 
 jobs:
-  run:
+  # ============================================================
+  # Job 1: Setup - checkout, install deps, generate model YAMLs
+  # ============================================================
+  setup:
     if: github.event.label.name == 'run-benchmark'
     runs-on: ubuntu-latest
-    timeout-minutes: 720
+    timeout-minutes: 30
+    outputs:
+      model_slug: ${{ steps.parse_model.outputs.model_slug }}
+      model_id: ${{ steps.parse_model.outputs.model_id }}
+      branch: ${{ steps.branch.outputs.branch }}
 
     steps:
       - name: Checkout repo
@@ -63,9 +70,9 @@ jobs:
           MODEL_ID="${MODEL_SLUG#*/}"
 
           {
-            echo "MODEL_SLUG=$MODEL_SLUG"
-            echo "MODEL_ID=$MODEL_ID"
-          } >> "$GITHUB_ENV"
+            echo "model_slug=$MODEL_SLUG"
+            echo "model_id=$MODEL_ID"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Comment on issue if parsing failed
         if: ${{ failure() && steps.parse_model.outcome == 'failure' }}
@@ -88,6 +95,8 @@ jobs:
       - name: Create work branch
         id: branch
         working-directory: ${{ env.DATASETS_DIR }}
+        env:
+          MODEL_SLUG: ${{ steps.parse_model.outputs.model_slug }}
         run: |
           set -euo pipefail
 
@@ -130,14 +139,6 @@ jobs:
           sparse-checkout: |
             custom_components
 
-      - name: Expose synthetic-home at /workspaces
-        run: |
-          set -euo pipefail
-          sudo mkdir -p /workspaces
-          
-          # Symlink to checked-out path in GitHub Actions.
-          sudo ln -s "${GITHUB_WORKSPACE}/home-assistant-synthetic-home" /workspaces/home-assistant-synthetic-home
-
       - name: Write secrets file for !secret
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -151,6 +152,7 @@ jobs:
           SYNTHETIC_HOME_DIR: ${{ github.workspace }}/home-assistant-synthetic-home/
           SECRETS_FILE: ${{ runner.temp }}/secrets.yaml
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MODEL_SLUG: ${{ steps.parse_model.outputs.model_slug }}
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
@@ -159,40 +161,181 @@ jobs:
             --models-dir "${GITHUB_WORKSPACE}/${{ env.DATASETS_DIR }}/models" \
             "${MODEL_SLUG}"
 
-      - name: Run collection (all datasets)
-        id: collect
-        continue-on-error: true
-        env:
-          SYNTHETIC_HOME_DIR: ${{ github.workspace }}/home-assistant-synthetic-home/
-          SECRETS_FILE: ${{ runner.temp }}/secrets.yaml
-          MODEL: ${{ env.MODEL_ID }}
-        working-directory: ${{ env.DATASETS_DIR }}
-        run: |
-          set -euo pipefail
-          
-          ./script/eval_collect_all_datasets.sh
-          ./script/eval_collect_automations.sh
+      - name: Upload workspace artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspace-setup
+          retention-days: 1
+          path: |
+            ${{ env.DATASETS_DIR }}
+            home-assistant-synthetic-home
 
-      - name: Run metrics (assist family + automations)
-        id: metrics
-        continue-on-error: true
-        env:
-          SYNTHETIC_HOME_DIR: ${{ github.workspace }}/home-assistant-synthetic-home/
-          SECRETS_FILE: ${{ runner.temp }}/secrets.yaml
+  # ============================================================
+  # Job 2: Collect + Metrics (parallel matrix)
+  # ============================================================
+  collect-metrics:
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dataset: assist
+            collect_script: eval_collect_assist.sh
+            metrics_script: eval_metrics_assist.sh
+          - dataset: assist-mini
+            collect_script: eval_collect_assist.sh
+            metrics_script: eval_metrics_assist.sh
+          - dataset: questions
+            collect_script: eval_collect_assist.sh
+            metrics_script: eval_metrics_assist.sh
+          - dataset: automations
+            collect_script: eval_collect_automations.sh
+            metrics_script: eval_metrics_automations.sh
+
+    steps:
+      - name: Download workspace artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: workspace-setup
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: |
+            ${{ env.DATASETS_DIR }}/requirements_dev.txt
+            ${{ env.DATASETS_DIR }}/requirements_eval.txt
+          activate-environment: true
+
+      - name: Install dependencies
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
           
-          DATASET_NAME=assist ./script/eval_metrics_assist.sh
-          DATASET_NAME=assist-mini ./script/eval_metrics_assist.sh
-          DATASET_NAME=questions ./script/eval_metrics_assist.sh
-          ./script/eval_metrics_automations.sh
+          uv pip install -r requirements_dev.txt --prerelease=allow
+          uv pip install -r requirements_eval.txt --prerelease=allow
+          uv pip install "python-open-router==0.3.3"
+
+      - name: Expose synthetic-home at /workspaces
+        run: |
+          set -euo pipefail
+          sudo mkdir -p /workspaces
+          
+          sudo ln -s "${GITHUB_WORKSPACE}/home-assistant-synthetic-home" /workspaces/home-assistant-synthetic-home
+
+      - name: Write secrets file for !secret
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          set -euo pipefail
+          
+          printf 'openrouter_api_key: "%s"' "$OPENROUTER_API_KEY" > "${RUNNER_TEMP}/secrets.yaml"
+
+      - name: Run collection (${{ matrix.dataset }})
+        env:
+          SYNTHETIC_HOME_DIR: ${{ github.workspace }}/home-assistant-synthetic-home/
+          SECRETS_FILE: ${{ runner.temp }}/secrets.yaml
+          MODEL: ${{ needs.setup.outputs.model_id }}
+          DATASET_NAME: ${{ matrix.dataset }}
+        working-directory: ${{ env.DATASETS_DIR }}
+        run: |
+          set -euo pipefail
+          
+          ./script/${{ matrix.collect_script }}
+
+      - name: Run metrics (${{ matrix.dataset }})
+        env:
+          SYNTHETIC_HOME_DIR: ${{ github.workspace }}/home-assistant-synthetic-home/
+          SECRETS_FILE: ${{ runner.temp }}/secrets.yaml
+          DATASET_NAME: ${{ matrix.dataset }}
+        working-directory: ${{ env.DATASETS_DIR }}
+        run: |
+          set -euo pipefail
+          
+          ./script/${{ matrix.metrics_script }}
+
+      - name: Upload reports artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-${{ matrix.dataset }}
+          retention-days: 1
+          path: |
+            ${{ env.DATASETS_DIR }}/reports
+
+  # ============================================================
+  # Job 3: Finalize - leaderboard, commit, comment
+  # ============================================================
+  finalize:
+    needs: [setup, collect-metrics]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout home-assistant-datasets
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DATASETS_REPO }}
+          path: ${{ env.DATASETS_DIR }}
+          ref: ${{ needs.setup.outputs.branch }}
+          fetch-depth: 0
+          token: ${{ secrets.HOME_ASSISTANT_DATASETS_TOKEN }}
+
+      - name: Download workspace artifacts (for models)
+        uses: actions/download-artifact@v4
+        with:
+          name: workspace-setup
+          path: workspace-setup
+
+      - name: Copy model YAMLs
+        run: |
+          set -euo pipefail
+          
+          cp -r workspace-setup/${{ env.DATASETS_DIR }}/models/* ${{ env.DATASETS_DIR }}/models/ || true
+
+      - name: Download all reports artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: reports-*
+          path: reports-artifacts
+          merge-multiple: false
+
+      - name: Merge reports
+        run: |
+          set -euo pipefail
+          
+          for dir in reports-artifacts/reports-*/; do
+            cp -r "${dir}reports/"* "${{ env.DATASETS_DIR }}/reports/" || true
+          done
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: |
+            ${{ env.DATASETS_DIR }}/requirements_dev.txt
+            ${{ env.DATASETS_DIR }}/requirements_eval.txt
+          activate-environment: true
+
+      - name: Install dependencies
+        working-directory: ${{ env.DATASETS_DIR }}
+        run: |
+          set -euo pipefail
+          
+          uv pip install -r requirements_dev.txt --prerelease=allow
+          uv pip install -r requirements_eval.txt --prerelease=allow
 
       - name: Build leaderboard
         id: leaderboard
         continue-on-error: true
-        env:
-          SECRETS_FILE: ${{ runner.temp }}/secrets.yaml
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
@@ -203,10 +346,11 @@ jobs:
         id: commit
         env:
           GH_TOKEN: ${{ secrets.HOME_ASSISTANT_DATASETS_TOKEN }}
+          MODEL_SLUG: ${{ needs.setup.outputs.model_slug }}
         run: |
           set -euo pipefail
           
-          BRANCH="${{ steps.branch.outputs.branch }}"
+          BRANCH="${{ needs.setup.outputs.branch }}"
           REPO="${{ env.DATASETS_REPO }}"
 
           cd "${{ env.DATASETS_DIR }}"
@@ -230,6 +374,8 @@ jobs:
         if: steps.commit.outputs.has_changes == '1'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MODEL_SLUG: ${{ needs.setup.outputs.model_slug }}
+          MODEL_ID: ${{ needs.setup.outputs.model_id }}
         run: |
           set -euo pipefail
           ISSUE_NUMBER="${{ github.event.issue.number }}"
@@ -237,7 +383,7 @@ jobs:
 
           ORIGIN_REPO="${{ env.DATASETS_REPO }}"
           UPSTREAM_REPO="${{ env.UPSTREAM_REPO }}"
-          BRANCH="${{ steps.branch.outputs.branch }}"
+          BRANCH="${{ needs.setup.outputs.branch }}"
 
           ORIGIN_OWNER="${ORIGIN_REPO%%/*}"
           BASE_BRANCH="$(gh repo view "${UPSTREAM_REPO}" --json defaultBranchRef -q .defaultBranchRef.name)"

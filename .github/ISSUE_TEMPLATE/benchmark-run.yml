@@ -17,7 +17,7 @@ body:
         </tr>
         </table>
         
-        - The benchmark will run when the `run-benchmark` label is applied by a maintainer.
+        The benchmark will run when the `run-benchmark` label is applied by a maintainer.
 
   - type: input
     id: model
