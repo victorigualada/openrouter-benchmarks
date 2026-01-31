@@ -38,7 +38,7 @@ jobs:
           repository: ${{ env.DATASETS_REPO }}
           path: ${{ env.DATASETS_DIR }}
           fetch-depth: 0
-          token: ${{ secrets.HOME_ASSISTANT_DATASETS_TOKEN || github.token }}
+          token: ${{ secrets.HOME_ASSISTANT_DATASETS_TOKEN }}
 
       - name: Authorize request
         env:
@@ -327,8 +327,6 @@ jobs:
           ORIGIN_REPO="${{ env.DATASETS_REPO }}"
           UPSTREAM_REPO="${{ env.UPSTREAM_REPO }}"
           BRANCH="${{ steps.branch.outputs.branch }}"
-          MODEL_SLUG="${{ steps.model.outputs.model_slug }}"
-          MODEL_ID="${{ steps.model.outputs.model_id }}"
 
           ORIGIN_OWNER="${ORIGIN_REPO%%/*}"
           BASE_BRANCH="$(gh repo view "${UPSTREAM_REPO}" --json defaultBranchRef -q .defaultBranchRef.name)"
@@ -345,16 +343,12 @@ jobs:
 
           - **Branch**: [\`${BRANCH}\`](${BRANCH_URL})
           - **Create PR into** \`${UPSTREAM_REPO}\`: [Open a pull request](${CREATE_PR_URL})
-          $(if [ -n "${REPORT_ROW}" ]; then
-            cat <<EOF2
 
           **Benchmark results**
 
           | Model | assist \$\${\\color{gray}\\small{\\textsf{(n=460)}}}\$\$ | assist-mini \$\${\\color{gray}\\small{\\textsf{(n=196)}}}\$\$ | questions \$\${\\color{gray}\\small{\\textsf{(n=370)}}}\$\$ | automations \$\${\\color{gray}\\small{\\textsf{(n=60)}}}\$\$ |
           | --- | --- | --- | --- | --- |
-          ${REPORT_TABLE}
-          EOF2
-          fi)
+          ${REPORT_ROW}
           EOF
           )"
 
@@ -377,5 +371,4 @@ jobs:
           ISSUE_NUMBER="${{ github.event.issue.number }}"
           REPO="${{ github.repository }}"
 
-          # Best-effort: comment on issue, do not close (maintainers may want to inspect logs)
           gh issue comment "$ISSUE_NUMBER" -R "$REPO" --body "Benchmark workflow failed. Please see Actions logs for details."
