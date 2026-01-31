@@ -196,9 +196,9 @@ jobs:
           # - dataset: assist
           #   collect_script: eval_collect_assist.sh
           #   metrics_script: eval_metrics_assist.sh
-          # - dataset: assist-mini
-          #   collect_script: eval_collect_assist.sh
-          #   metrics_script: eval_metrics_assist.sh
+          - dataset: assist-mini
+            collect_script: eval_collect_assist.sh
+            metrics_script: eval_metrics_assist.sh
           # - dataset: questions
           #   collect_script: eval_collect_assist.sh
           #   metrics_script: eval_metrics_assist.sh
@@ -309,27 +309,14 @@ jobs:
           path: reports-artifacts
           merge-multiple: false
 
-      - name: Debug artifact structure
-        if: needs.collect-metrics.result == 'success'
-        run: |
-          echo "=== Artifact structure ==="
-          find reports-artifacts -type f | head -50 || echo "No files found in reports-artifacts"
-          echo ""
-          echo "=== Destination reports dir ==="
-          ls -la "${{ env.DATASETS_DIR }}/reports/" || echo "Reports dir doesn't exist"
-
       - name: Merge reports
         if: needs.collect-metrics.result == 'success'
         run: |
           set -euo pipefail
           
           for dir in reports-artifacts/reports-*/; do
-            echo "Merging reports from: $dir"
             rsync -av "${dir}" "${{ env.DATASETS_DIR }}/reports/"
           done
-          
-          echo "=== New reports after merge ==="
-          find "${{ env.DATASETS_DIR }}/reports" -name "*.yaml" -mmin -5 | head -20 || true
 
       - name: Install uv
         if: needs.collect-metrics.result == 'success'
@@ -369,11 +356,7 @@ jobs:
         run: |
           set -euo pipefail
           
-          echo "=== Building leaderboard ==="
           home-assistant-datasets leaderboard build
-          
-          echo "=== README.md after build ==="
-          head -100 reports/README.md
 
       - name: Commit and push results
         if: needs.collect-metrics.result == 'success'
@@ -389,17 +372,7 @@ jobs:
 
           cd "${{ env.DATASETS_DIR }}"
           
-          echo "=== Git status before add ==="
-          git status --porcelain
-          
-          echo "=== Reports dir contents ==="
-          ls -la reports/ || echo "Reports dir not found"
-          
-          echo "=== Adding files ==="
           git add models/ reports/
-          
-          echo "=== Git status after add ==="
-          git status --porcelain
 
           if git diff --cached --quiet; then
             echo "has_changes=0" >> "$GITHUB_OUTPUT"
@@ -436,13 +409,7 @@ jobs:
           CREATE_PR_URL="https://github.com/${UPSTREAM_REPO}/compare/${BASE_BRANCH}...${ORIGIN_OWNER}:${BRANCH}?expand=1"
 
           REPORTS_README="${{ env.DATASETS_DIR }}/reports/README.md"
-          
-          echo "=== Searching for MODEL_ID: ${MODEL_ID} ==="
-          echo "=== README.md table rows ==="
-          grep -E "^\|" "${REPORTS_README}" | head -20 || echo "No table rows found"
-          
           REPORT_ROW="$(grep -m 1 -F "${MODEL_ID}" "${REPORTS_README}" || true)"
-          echo "=== Found row: ${REPORT_ROW:-<empty>} ==="
 
           gh issue comment "$ISSUE_NUMBER" -R "$REPO" --body "$(
             cat <<EOF
