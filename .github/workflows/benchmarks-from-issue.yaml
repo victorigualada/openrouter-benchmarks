@@ -40,27 +40,6 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.HOME_ASSISTANT_DATASETS_TOKEN }}
 
-      - name: Authorize request
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          ISSUE_NUMBER="${{ github.event.issue.number }}"
-          REPO="${{ github.repository }}"
-
-          ASSOC="$(jq -r '.issue.author_association // ""' "$GITHUB_EVENT_PATH")"
-          if [ "$ASSOC" != "MEMBER" ] && [ "$ASSOC" != "OWNER" ] && [ "$ASSOC" != "COLLABORATOR" ]; then
-            gh issue comment "$ISSUE_NUMBER" -R "$REPO" --body "$(
-              cat <<'EOF'
-          This benchmark request was closed automatically because the issue author is not authorized to trigger benchmark runs.
-
-          If you believe this is an error, please ask a maintainer to re-open and apply the `run-benchmark` label.
-          EOF
-            )"
-            gh issue close "$ISSUE_NUMBER" -R "$REPO" --reason "not planned"
-            exit 0
-          fi
-
       - name: Parse and validate single model
         id: model
         env:
@@ -155,6 +134,7 @@ jobs:
       - name: Export model vars
         run: |
           set -euo pipefail
+          
           echo "MODEL_SLUG=${{ steps.model.outputs.model_slug }}" >> "$GITHUB_ENV"
           echo "MODEL_ID=${{ steps.model.outputs.model_id }}" >> "$GITHUB_ENV"
 
@@ -205,6 +185,7 @@ jobs:
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
+          
           uv pip install -r requirements_dev.txt --prerelease=allow
           uv pip install -r requirements_eval.txt --prerelease=allow
 
@@ -212,6 +193,7 @@ jobs:
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
+          
           uv pip install "python-open-router==0.3.3"
 
       - name: Prepare allenporter/home-assistant-synthetic-home
@@ -226,8 +208,8 @@ jobs:
         run: |
           set -euo pipefail
           sudo mkdir -p /workspaces
-          # Symlink it to our checked-out path in GitHub Actions.
-          sudo rm -rf /workspaces/home-assistant-synthetic-home
+          
+          # Symlink to checked-out path in GitHub Actions.
           sudo ln -s "${GITHUB_WORKSPACE}/home-assistant-synthetic-home" /workspaces/home-assistant-synthetic-home
 
       - name: Write secrets file for !secret
@@ -235,6 +217,7 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           set -euo pipefail
+          
           printf 'openrouter_api_key: "%s"' "$OPENROUTER_API_KEY" > "${RUNNER_TEMP}/secrets.yaml"
 
       - name: Generate model YAMLs from OpenRouter
@@ -260,9 +243,8 @@ jobs:
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
+          ./script/eval_collect_all_datasets.sh
           ./script/eval_collect_automations.sh
-        #./script/eval_collect_all_datasets.sh
-          
 
       - name: Run metrics (assist family + automations)
         id: metrics
@@ -273,10 +255,10 @@ jobs:
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
+          DATASET_NAME=assist ./script/eval_metrics_assist.sh
+          DATASET_NAME=assist-mini ./script/eval_metrics_assist.sh
+          DATASET_NAME=questions ./script/eval_metrics_assist.sh
           ./script/eval_metrics_automations.sh
-        # DATASET_NAME=assist ./script/eval_metrics_assist.sh
-        # DATASET_NAME=assist-mini ./script/eval_metrics_assist.sh
-        # DATASET_NAME=questions ./script/eval_metrics_assist.sh
 
       - name: Build leaderboard
         id: leaderboard
@@ -339,7 +321,7 @@ jobs:
 
           gh issue comment "$ISSUE_NUMBER" -R "$REPO" --body "$(
             cat <<EOF
-          ✅ Benchmark results for \`${MODEL_SLUG}\` were pushed.
+          ✅ Benchmark for \`${MODEL_SLUG}\` completed.
 
           - **Branch**: [\`${BRANCH}\`](${BRANCH_URL})
           - **Create PR into** \`${UPSTREAM_REPO}\`: [Open a pull request](${CREATE_PR_URL})
@@ -360,7 +342,7 @@ jobs:
           set -euo pipefail
           ISSUE_NUMBER="${{ github.event.issue.number }}"
           REPO="${{ github.repository }}"
-          gh issue comment "$ISSUE_NUMBER" -R "$REPO" --body "Benchmark run finished, but nothing new was produced to commit (no PR created)."
+          gh issue comment "$ISSUE_NUMBER" -R "$REPO" --body "❌ Benchmark run finished, but nothing new was produced to commit (no PR created)."
 
       - name: Notify failure
         if: failure()
@@ -371,4 +353,4 @@ jobs:
           ISSUE_NUMBER="${{ github.event.issue.number }}"
           REPO="${{ github.repository }}"
 
-          gh issue comment "$ISSUE_NUMBER" -R "$REPO" --body "Benchmark workflow failed. Please see Actions logs for details."
+          gh issue comment "$ISSUE_NUMBER" -R "$REPO" --body "❌ Benchmark workflow failed. Please see Actions logs for details."

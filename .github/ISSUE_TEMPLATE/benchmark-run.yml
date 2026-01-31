@@ -11,16 +11,15 @@ body:
         - Only org members/collaborators can trigger runs.
         - A workflow will validate this issue when the `run-benchmark` label is applied.
 
-  - type: textarea
-    id: models
+  - type: input
+    id: model
     attributes:
       label: Model (OpenRouter URL or slug)
       description: |
         Exactly one model. Accepted formats:
         - https://openrouter.ai/<author>/<model>
         - <author>/<model>
-      placeholder: |
-        https://openrouter.ai/mistralai/mistral-large-2512
+      placeholder: https://openrouter.ai/mistralai/mistral-large-2512
     validations:
       required: true
 
