@@ -44,6 +44,12 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.HOME_ASSISTANT_DATASETS_TOKEN }}
 
+      - name: Sync fork with upstream
+        env:
+          GH_TOKEN: ${{ secrets.HOME_ASSISTANT_DATASETS_TOKEN }}
+        run: |
+          gh repo sync "${{ env.DATASETS_REPO }}" --source "${{ env.UPSTREAM_REPO }}"
+
       - name: Parse model slug from issue form
         id: parse_model
         shell: bash
