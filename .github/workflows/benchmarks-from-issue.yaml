@@ -193,15 +193,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - dataset: assist
-            collect_script: eval_collect_assist.sh
-            metrics_script: eval_metrics_assist.sh
-          - dataset: assist-mini
-            collect_script: eval_collect_assist.sh
-            metrics_script: eval_metrics_assist.sh
-          - dataset: questions
-            collect_script: eval_collect_assist.sh
-            metrics_script: eval_metrics_assist.sh
+          # - dataset: assist
+          #   collect_script: eval_collect_assist.sh
+          #   metrics_script: eval_metrics_assist.sh
+          # - dataset: assist-mini
+          #   collect_script: eval_collect_assist.sh
+          #   metrics_script: eval_metrics_assist.sh
+          # - dataset: questions
+          #   collect_script: eval_collect_assist.sh
+          #   metrics_script: eval_metrics_assist.sh
           - dataset: automations
             collect_script: eval_collect_automations.sh
             metrics_script: eval_metrics_automations.sh
@@ -315,7 +315,7 @@ jobs:
           set -euo pipefail
           
           for dir in reports-artifacts/reports-*/; do
-            cp -r "${dir}reports/"* "${{ env.DATASETS_DIR }}/reports/" || true
+            cp -r "${dir}${{ env.DATASETS_DIR }}/reports/"* "${{ env.DATASETS_DIR }}/reports/" || true
           done
 
       - name: Install uv
