@@ -158,6 +158,24 @@ jobs:
             --models-dir "${GITHUB_WORKSPACE}/${{ env.DATASETS_DIR }}/models" \
             "${MODEL_SLUG}"
 
+      - name: Commit and push models
+        env:
+          GH_TOKEN: ${{ secrets.HOME_ASSISTANT_DATASETS_TOKEN }}
+          MODEL_SLUG: ${{ steps.parse_model.outputs.model_slug }}
+        working-directory: ${{ env.DATASETS_DIR }}
+        run: |
+          set -euo pipefail
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          git add models/
+          
+          if ! git diff --cached --quiet; then
+            git commit -m "Add model config: ${MODEL_SLUG}"
+            git push -u origin "${{ steps.branch.outputs.branch }}"
+          fi
+
       - name: Upload workspace artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -283,20 +301,6 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.HOME_ASSISTANT_DATASETS_TOKEN }}
 
-      - name: Download workspace artifacts (for models)
-        if: needs.collect-metrics.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: workspace-setup
-          path: workspace-setup
-
-      - name: Copy model YAMLs
-        if: needs.collect-metrics.result == 'success'
-        run: |
-          set -euo pipefail
-          
-          cp -r workspace-setup/${{ env.DATASETS_DIR }}/models/* ${{ env.DATASETS_DIR }}/models/ || true
-
       - name: Download all reports artifacts
         if: needs.collect-metrics.result == 'success'
         uses: actions/download-artifact@v4
@@ -358,7 +362,7 @@ jobs:
 
           cd "${{ env.DATASETS_DIR }}"
           git status --porcelain
-          git add models/*.yaml reports/** || true
+          git add models/ reports/ || true
 
           if git diff --cached --quiet; then
             echo "has_changes=0" >> "$GITHUB_OUTPUT"
