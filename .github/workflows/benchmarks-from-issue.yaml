@@ -351,10 +351,21 @@ jobs:
           uv pip install -r requirements_dev.txt --prerelease=allow
           uv pip install -r requirements_eval.txt --prerelease=allow
 
+      - name: Write secrets file for !secret
+        if: needs.collect-metrics.result == 'success'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          set -euo pipefail
+          
+          printf 'openrouter_api_key: "%s"' "$OPENROUTER_API_KEY" > "${RUNNER_TEMP}/secrets.yaml"
+
       - name: Build leaderboard
         if: needs.collect-metrics.result == 'success'
         id: leaderboard
         working-directory: ${{ env.DATASETS_DIR }}
+        env:
+          SECRETS_FILE: ${{ runner.temp }}/secrets.yaml
         run: |
           set -euo pipefail
           
