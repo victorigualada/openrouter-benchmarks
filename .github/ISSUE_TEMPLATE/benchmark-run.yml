@@ -11,8 +11,8 @@ body:
         You can find the model slug in the OpenRouter site: https://openrouter.ai/models
         
         And use the 📋 button to copy the model slug:
-        ![Copy model slug](./image.png)
-
+        ![Copy model slug](https://raw.githubusercontent.com/victorigualada/openrouter-benchmark/main/.github/assets/copy-model-slug.png)
+        
         - Only org members/collaborators can trigger runs.
         - A workflow will validate this issue when the `run-benchmark` label is applied by a maintainer.
 
