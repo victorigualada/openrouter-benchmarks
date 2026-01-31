@@ -354,12 +354,15 @@ jobs:
       - name: Build leaderboard
         if: needs.collect-metrics.result == 'success'
         id: leaderboard
-        continue-on-error: true
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
           
+          echo "=== Building leaderboard ==="
           home-assistant-datasets leaderboard build
+          
+          echo "=== README.md after build ==="
+          head -100 reports/README.md
 
       - name: Commit and push results
         if: needs.collect-metrics.result == 'success'
@@ -422,7 +425,13 @@ jobs:
           CREATE_PR_URL="https://github.com/${UPSTREAM_REPO}/compare/${BASE_BRANCH}...${ORIGIN_OWNER}:${BRANCH}?expand=1"
 
           REPORTS_README="${{ env.DATASETS_DIR }}/reports/README.md"
+          
+          echo "=== Searching for MODEL_ID: ${MODEL_ID} ==="
+          echo "=== README.md table rows ==="
+          grep -E "^\|" "${REPORTS_README}" | head -20 || echo "No table rows found"
+          
           REPORT_ROW="$(grep -m 1 -F "${MODEL_ID}" "${REPORTS_README}" || true)"
+          echo "=== Found row: ${REPORT_ROW:-<empty>} ==="
 
           gh issue comment "$ISSUE_NUMBER" -R "$REPO" --body "$(
             cat <<EOF
