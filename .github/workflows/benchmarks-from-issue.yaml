@@ -261,16 +261,19 @@ jobs:
 
   finalize:
     needs: [setup, collect-metrics]
+    if: always() && needs.setup.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
       - name: Checkout repo
+        if: needs.collect-metrics.result == 'success'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Checkout home-assistant-datasets
+        if: needs.collect-metrics.result == 'success'
         uses: actions/checkout@v4
         with:
           repository: ${{ env.DATASETS_REPO }}
@@ -280,18 +283,21 @@ jobs:
           token: ${{ secrets.HOME_ASSISTANT_DATASETS_TOKEN }}
 
       - name: Download workspace artifacts (for models)
+        if: needs.collect-metrics.result == 'success'
         uses: actions/download-artifact@v4
         with:
           name: workspace-setup
           path: workspace-setup
 
       - name: Copy model YAMLs
+        if: needs.collect-metrics.result == 'success'
         run: |
           set -euo pipefail
           
           cp -r workspace-setup/${{ env.DATASETS_DIR }}/models/* ${{ env.DATASETS_DIR }}/models/ || true
 
       - name: Download all reports artifacts
+        if: needs.collect-metrics.result == 'success'
         uses: actions/download-artifact@v4
         with:
           pattern: reports-*
@@ -299,6 +305,7 @@ jobs:
           merge-multiple: false
 
       - name: Merge reports
+        if: needs.collect-metrics.result == 'success'
         run: |
           set -euo pipefail
           
@@ -307,6 +314,7 @@ jobs:
           done
 
       - name: Install uv
+        if: needs.collect-metrics.result == 'success'
         uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -317,6 +325,7 @@ jobs:
           activate-environment: true
 
       - name: Install dependencies
+        if: needs.collect-metrics.result == 'success'
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
@@ -325,6 +334,7 @@ jobs:
           uv pip install -r requirements_eval.txt --prerelease=allow
 
       - name: Build leaderboard
+        if: needs.collect-metrics.result == 'success'
         id: leaderboard
         continue-on-error: true
         working-directory: ${{ env.DATASETS_DIR }}
@@ -334,6 +344,7 @@ jobs:
           home-assistant-datasets leaderboard build
 
       - name: Commit and push results
+        if: needs.collect-metrics.result == 'success'
         id: commit
         env:
           GH_TOKEN: ${{ secrets.HOME_ASSISTANT_DATASETS_TOKEN }}
@@ -362,7 +373,7 @@ jobs:
           echo "has_changes=1" >> "$GITHUB_OUTPUT"
 
       - name: Comment PR link
-        if: steps.commit.outputs.has_changes == '1'
+        if: needs.collect-metrics.result == 'success' && steps.commit.outputs.has_changes == '1'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MODEL_SLUG: ${{ needs.setup.outputs.model_slug }}
@@ -401,7 +412,7 @@ jobs:
           )"
 
       - name: Notify nothing produced
-        if: steps.commit.outputs.has_changes == '0'
+        if: needs.collect-metrics.result == 'success' && steps.commit.outputs.has_changes == '0'
         uses: actions/github-script@v7
         with:
           script: |
@@ -419,7 +430,7 @@ jobs:
             });
 
       - name: Notify failure
-        if: ${{ failure() && !cancelled() }}
+        if: failure() || needs.collect-metrics.result == 'failure'
         uses: actions/github-script@v7
         with:
           script: |
