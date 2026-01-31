@@ -11,7 +11,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: benchmarks-issue-${{ github.event.issue.number }}
+  group: benchmark-queue
   cancel-in-progress: false
 
 env:
