@@ -309,13 +309,32 @@ jobs:
           path: reports-artifacts
           merge-multiple: false
 
+      - name: Debug artifact structure
+        if: needs.collect-metrics.result == 'success'
+        run: |
+          echo "=== Artifact structure ==="
+          find reports-artifacts -type f | head -50 || echo "No files found in reports-artifacts"
+          echo ""
+          echo "=== Destination reports dir ==="
+          ls -la "${{ env.DATASETS_DIR }}/reports/" || echo "Reports dir doesn't exist"
+
       - name: Merge reports
         if: needs.collect-metrics.result == 'success'
         run: |
           set -euo pipefail
           
           for dir in reports-artifacts/reports-*/; do
-            cp -r "${dir}${{ env.DATASETS_DIR }}/reports/"* "${{ env.DATASETS_DIR }}/reports/" || true
+            echo "Processing: $dir"
+            if [ -d "${dir}${{ env.DATASETS_DIR }}/reports" ]; then
+              echo "Found reports at: ${dir}${{ env.DATASETS_DIR }}/reports"
+              cp -rv "${dir}${{ env.DATASETS_DIR }}/reports/"* "${{ env.DATASETS_DIR }}/reports/"
+            elif [ -d "${dir}reports" ]; then
+              echo "Found reports at: ${dir}reports"
+              cp -rv "${dir}reports/"* "${{ env.DATASETS_DIR }}/reports/"
+            else
+              echo "Looking for any reports structure..."
+              find "$dir" -name "reports" -type d
+            fi
           done
 
       - name: Install uv
