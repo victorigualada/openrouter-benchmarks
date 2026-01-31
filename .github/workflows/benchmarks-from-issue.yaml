@@ -40,124 +40,50 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.HOME_ASSISTANT_DATASETS_TOKEN }}
 
-      - name: Parse and validate single model
-        id: model
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Parse model slug from issue form
+        id: parse_model
+        shell: bash
         run: |
-          set -euo pipefail
-          ISSUE_NUMBER="${{ github.event.issue.number }}"
-          REPO="${{ github.repository }}"
+          BODY="${{ github.event.issue.body }}"
 
-          python3 - <<'PY'
-          import json, os, re, sys
-          from urllib.parse import urlparse
+          MODEL_SLUG=$(printf "%s\n" "$BODY" \
+            | awk '
+              /^### Model slug \(OpenRouter\)/ {found=1; next}
+              /^### / && found {exit}
+              found && NF {print; exit}
+            ' \
+            | tr -d '\r' \
+            | xargs)
 
-          event_path = os.environ["GITHUB_EVENT_PATH"]
-          event = json.load(open(event_path, "r", encoding="utf-8"))
-          body = (event.get("issue") or {}).get("body") or ""
+          if ! [[ "$MODEL_SLUG" =~ ^[^/]+/[^/]+$ ]]; then
+            echo "Invalid model slug format: $MODEL_SLUG"
+            exit 1
+          fi
 
-          match = re.search(r"^###\s+Model(?:s)?\b.*?\n(.*?)(?:\n###\s+|\Z)", body, flags=re.M | re.S)
-          if not match:
-              print("Could not find a '### Model' section in the issue body.", file=sys.stderr)
-              sys.exit(2)
+          MODEL_ID="${MODEL_SLUG#*/}"
 
-          raw_block = match.group(1)
-          lines = []
-          for line in raw_block.splitlines():
-              s = line.strip()
-              if not s:
-                  continue
-              # Remove common markdown bullet prefixes
-              if s.startswith(("-", "*")):
-                  s = s[1:].strip()
-              # Defensive: sometimes users paste literal "\n" or "\r" sequences
-              # into the issue template; strip them so we don't create filenames
-              # like "model-id\\n.yaml".
-              s = s.replace("\\n", "").replace("\\r", "").strip()
-              if not s or s.startswith("#"):
-                  continue
-              lines.append(s)
+          {
+            echo "MODEL_SLUG=$MODEL_SLUG"
+            echo "MODEL_ID=$MODEL_ID"
+          } >> "$GITHUB_ENV"
 
-          if not lines:
-              print("No model found under the '### Model' section.", file=sys.stderr)
-              sys.exit(2)
-          if len(lines) != 1:
-              print(
-                  f"Expected exactly 1 model under '### Model', got {len(lines)}.",
-                  file=sys.stderr,
-              )
-              sys.exit(2)
-
-          def parse_to_slug(value: str) -> str | None:
-              # Defensive cleanup for literal escape sequences sometimes pasted into issues.
-              value = value.replace("\\n", "").replace("\\r", "").strip()
-              if "://" not in value:
-                  # slug
-                  if value.count("/") < 1:
-                      return None
-                  author, model = value.split("/", 1)
-                  author = author.strip()
-                  model = model.strip()
-                  if not author or not model:
-                      return None
-                  return f"{author}/{model}"
-              u = urlparse(value)
-              if u.scheme not in ("http", "https"):
-                  return None
-              if u.netloc not in ("openrouter.ai", "www.openrouter.ai"):
-                  return None
-              parts = [p for p in u.path.split("/") if p]
-              if len(parts) < 2:
-                  return None
-              return f"{parts[0]}/{parts[1]}"
-
-          v = lines[0]
-          slug = parse_to_slug(v)
-          if not slug:
-              print(
-                  f"Invalid model entry: {v!r} (expected openrouter URL or 'author/model')",
-                  file=sys.stderr,
-              )
-              sys.exit(2)
-          slug = slug.replace("\\n", "").replace("\\r", "").strip()
-          model_id = slug.rsplit("/", 1)[-1].replace("\\n", "").replace("\\r", "").strip()
-          if not model_id:
-              print(f"Could not derive model id from slug: {slug!r}", file=sys.stderr)
-              sys.exit(2)
-
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
-              out.write(f"model_slug={slug}\n")
-              out.write(f"model_id={model_id}\n")
-          PY
-
-      - name: Export model vars
-        run: |
-          set -euo pipefail
-          
-          echo "MODEL_SLUG=${{ steps.model.outputs.model_slug }}" >> "$GITHUB_ENV"
-          echo "MODEL_ID=${{ steps.model.outputs.model_id }}" >> "$GITHUB_ENV"
-
-      - name: Close invalid issue
-        if: failure() && steps.model.outcome == 'failure'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          ISSUE_NUMBER="${{ github.event.issue.number }}"
-          REPO="${{ github.repository }}"
-
-          gh issue comment "$ISSUE_NUMBER" -R "$REPO" --body "$(
-            cat <<'EOF'
-          This benchmark request was closed automatically because it did not match the required issue template.
-
-          Please ensure the issue contains a `### Model` section with exactly **one** OpenRouter model, as either:
-          - `https://openrouter.ai/<author>/<model>`
-          - `<author>/<model>`
-          EOF
-          )"
-          gh issue close "$ISSUE_NUMBER" -R "$REPO" --reason "not planned"
-          exit 0
+      - name: Comment on issue if parsing failed
+        if: ${{ failure() && steps.parse_model.outcome == 'failure' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                "❌ **Benchmark request validation failed**",
+                "",
+                "Please ensure **Model slug (OpenRouter)** is set to the format:",
+                "",
+                "`author/model`",
+              ].join("\n"),
+            });
 
       - name: Create work branch
         id: branch
@@ -228,7 +154,7 @@ jobs:
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
-          echo "Fetching model slug: ${MODEL_SLUG}"
+          
           python3 "${GITHUB_WORKSPACE}/script/openrouter_fetch_model.py" \
             --models-dir "${GITHUB_WORKSPACE}/${{ env.DATASETS_DIR }}/models" \
             "${MODEL_SLUG}"
@@ -243,6 +169,7 @@ jobs:
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
+          
           ./script/eval_collect_all_datasets.sh
           ./script/eval_collect_automations.sh
 
@@ -255,6 +182,7 @@ jobs:
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
+          
           DATASET_NAME=assist ./script/eval_metrics_assist.sh
           DATASET_NAME=assist-mini ./script/eval_metrics_assist.sh
           DATASET_NAME=questions ./script/eval_metrics_assist.sh
@@ -268,6 +196,7 @@ jobs:
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
+          
           home-assistant-datasets leaderboard build
 
       - name: Commit and push results
@@ -276,7 +205,7 @@ jobs:
           GH_TOKEN: ${{ secrets.HOME_ASSISTANT_DATASETS_TOKEN }}
         run: |
           set -euo pipefail
-          ISSUE_NUMBER="${{ github.event.issue.number }}"
+          
           BRANCH="${{ steps.branch.outputs.branch }}"
           REPO="${{ env.DATASETS_REPO }}"
 
@@ -321,7 +250,7 @@ jobs:
 
           gh issue comment "$ISSUE_NUMBER" -R "$REPO" --body "$(
             cat <<EOF
-          ✅ Benchmark for \`${MODEL_SLUG}\` completed.
+          ✅ **Benchmark for \`${MODEL_SLUG}\` succeeded**
 
           - **Branch**: [\`${BRANCH}\`](${BRANCH_URL})
           - **Create PR into** \`${UPSTREAM_REPO}\`: [Open a pull request](${CREATE_PR_URL})
@@ -336,21 +265,59 @@ jobs:
 
       - name: Notify nothing produced
         if: steps.commit.outputs.has_changes == '0'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          ISSUE_NUMBER="${{ github.event.issue.number }}"
-          REPO="${{ github.repository }}"
-          gh issue comment "$ISSUE_NUMBER" -R "$REPO" --body "❌ Benchmark run finished, but nothing new was produced to commit (no PR created)."
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              body: [
+                "⚠️ **Benchmark completed, but no changes were produced**",
+                "",
+                "This usually means:",
+                "- The benchmark results are identical to existing data, or",
+                "- No new models/reports were generated.",
+              ].join("\n"),
+            });
 
       - name: Notify failure
-        if: failure()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          ISSUE_NUMBER="${{ github.event.issue.number }}"
-          REPO="${{ github.repository }}"
+        if: ${{ failure() && !cancelled() }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.issue.number;
 
-          gh issue comment "$ISSUE_NUMBER" -R "$REPO" --body "❌ Benchmark workflow failed. Please see Actions logs for details."
+            // Fetch jobs for this workflow run
+            const jobs = await github.rest.actions.listJobsForWorkflowRun({
+              owner,
+              repo,
+              run_id: context.runId,
+            });
+
+            const failedJob = jobs.data.jobs.find(
+              job => job.conclusion === "failure"
+            );
+
+            const runUrl = `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`;
+            const jobUrl = failedJob?.html_url;
+
+            const body = [
+              "❌ **Benchmark workflow failed**",
+              "",
+              jobUrl
+                ? `🔗 **Failed job**: ${jobUrl}`
+                : `🔗 **Workflow run**: ${runUrl}`,
+              "",
+              "Please check the logs for details.",
+            ].join("\n");
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number,
+              body,
+            });
+
+

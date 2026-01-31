@@ -1,25 +1,29 @@
 ---
 name: "Benchmark run (OpenRouter)"
-description: "Request a benchmark run for a single OpenRouter model"
+description: "Request a benchmark run for an OpenRouter model"
 title: "Benchmark: <author>/<model> (OpenRouter)"
 body:
   - type: markdown
     attributes:
       value: |
+        
         Submit a benchmark request for a single OpenRouter model.
+        You can find the model slug in the OpenRouter site: https://openrouter.ai/models
+        
+        And use the 📋 button to copy the model slug:
+        ![Copy model slug](./image.png)
 
         - Only org members/collaborators can trigger runs.
-        - A workflow will validate this issue when the `run-benchmark` label is applied.
+        - A workflow will validate this issue when the `run-benchmark` label is applied by a maintainer.
 
   - type: input
     id: model
     attributes:
-      label: Model (OpenRouter URL or slug)
+      label: Model slug (OpenRouter)
       description: |
-        Exactly one model. Accepted formats:
-        - https://openrouter.ai/<author>/<model>
-        - <author>/<model>
-      placeholder: https://openrouter.ai/mistralai/mistral-large-2512
+        Required format:
+        - \<author\>/\<model\>
+      placeholder: mistralai/mistral-large-2512
     validations:
       required: true
 
