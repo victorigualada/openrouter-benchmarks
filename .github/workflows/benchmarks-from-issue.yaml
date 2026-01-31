@@ -21,9 +21,6 @@ env:
   UPSTREAM_REPO: allenporter/home-assistant-datasets
 
 jobs:
-  # ============================================================
-  # Job 1: Setup - checkout, install deps, generate model YAMLs
-  # ============================================================
   setup:
     if: github.event.label.name == 'run-benchmark'
     runs-on: ubuntu-latest
@@ -170,9 +167,6 @@ jobs:
             ${{ env.DATASETS_DIR }}
             home-assistant-synthetic-home
 
-  # ============================================================
-  # Job 2: Collect + Metrics (parallel matrix)
-  # ============================================================
   collect-metrics:
     needs: setup
     runs-on: ubuntu-latest
@@ -244,7 +238,7 @@ jobs:
         run: |
           set -euo pipefail
           
-          ./script/${{ matrix.collect_script }}
+          bash ./script/${{ matrix.collect_script }}
 
       - name: Run metrics (${{ matrix.dataset }})
         env:
@@ -255,7 +249,7 @@ jobs:
         run: |
           set -euo pipefail
           
-          ./script/${{ matrix.metrics_script }}
+          bash ./script/${{ matrix.metrics_script }}
 
       - name: Upload reports artifacts
         uses: actions/upload-artifact@v4
@@ -265,9 +259,6 @@ jobs:
           path: |
             ${{ env.DATASETS_DIR }}/reports
 
-  # ============================================================
-  # Job 3: Finalize - leaderboard, commit, comment
-  # ============================================================
   finalize:
     needs: [setup, collect-metrics]
     runs-on: ubuntu-latest
