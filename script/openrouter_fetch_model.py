@@ -18,7 +18,7 @@ Notes:
   - `config_entry_options.chat_model` is set to the full OpenRouter slug
   - costs are derived from `endpoint.pricing.prompt` and `endpoint.pricing.completion`
     (OpenRouter reports $/token; the YAML uses $/1M tokens)
-  - the YAML description uses the friendly model name (not the long model description)
+  - the YAML description uses the model's API description if available
 """
 
 from __future__ import annotations
@@ -155,7 +155,11 @@ def _build_model_yaml(model_id: str, model_slug: str, model_entry: dict[str, Any
     friendly_name = str(model_entry.get("short_name") or model_entry.get(
         "name") or model_slug).strip() or model_slug
 
-    description = f"OpenRouter integration using {friendly_name}"
+    api_description = model_entry.get("description")
+    if api_description and isinstance(api_description, str) and api_description.strip():
+        description = api_description.strip().replace("\n", " ")
+    else:
+        description = f"OpenRouter integration using {friendly_name}"
 
     endpoint = model_entry.get("endpoint")
     if not isinstance(endpoint, dict):
