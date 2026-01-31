@@ -323,10 +323,15 @@ jobs:
         run: |
           set -euo pipefail
           
+          mkdir -p "${{ env.DATASETS_DIR }}/reports"
+          
           for dir in reports-artifacts/reports-*/; do
             echo "Copying reports from: $dir"
             cp -rv "${dir}"* "${{ env.DATASETS_DIR }}/reports/"
           done
+          
+          echo "=== Reports after merge ==="
+          find "${{ env.DATASETS_DIR }}/reports" -type f | head -20
 
       - name: Install uv
         if: needs.collect-metrics.result == 'success'
@@ -371,8 +376,18 @@ jobs:
           REPO="${{ env.DATASETS_REPO }}"
 
           cd "${{ env.DATASETS_DIR }}"
+          
+          echo "=== Git status before add ==="
           git status --porcelain
-          git add models/ reports/ || true
+          
+          echo "=== Reports dir contents ==="
+          ls -la reports/ || echo "Reports dir not found"
+          
+          echo "=== Adding files ==="
+          git add models/ reports/
+          
+          echo "=== Git status after add ==="
+          git status --porcelain
 
           if git diff --cached --quiet; then
             echo "has_changes=0" >> "$GITHUB_OUTPUT"
