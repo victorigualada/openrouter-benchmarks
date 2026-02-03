@@ -346,7 +346,7 @@ jobs:
           name: reports-${{ matrix.dataset }}
           retention-days: 1
           path: |
-            ${{ env.DATASETS_DIR }}/reports
+            ${{ env.DATASETS_DIR }}/reports/${{ matrix.dataset }}
 
   finalize:
     needs: [setup, collect-metrics]
