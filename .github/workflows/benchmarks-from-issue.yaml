@@ -384,27 +384,13 @@ jobs:
         run: |
           set -euo pipefail
           
-          echo "=== Artifact structure after download ==="
-          find reports-artifacts -type d | head -50
-          echo ""
-          echo "=== Files in each artifact ==="
           for dir in reports-artifacts/reports-*/; do
-            echo "--- ${dir} ---"
-            ls -la "${dir}" || true
+            dataset="${dir#reports-artifacts/reports-}"
+            dataset="${dataset%/}"
+            
+            mkdir -p "${{ env.DATASETS_DIR }}/reports/${dataset}"
+            rsync -a "${dir}" "${{ env.DATASETS_DIR }}/reports/${dataset}/"
           done
-          echo ""
-          echo "=== Destination before merge ==="
-          ls -la "${{ env.DATASETS_DIR }}/reports/" || true
-          echo ""
-          
-          for dir in reports-artifacts/reports-*/; do
-            echo "Syncing ${dir} -> ${{ env.DATASETS_DIR }}/reports/"
-            rsync -av "${dir}" "${{ env.DATASETS_DIR }}/reports/"
-          done
-          
-          echo ""
-          echo "=== Destination after merge ==="
-          find "${{ env.DATASETS_DIR }}/reports" -type d | head -50
 
       - name: Install uv
         if: needs.collect-metrics.result == 'success'
