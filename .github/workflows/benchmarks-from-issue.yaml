@@ -21,8 +21,72 @@ env:
   UPSTREAM_REPO: allenporter/home-assistant-datasets
 
 jobs:
-  setup:
+  check-pending-pr:
     if: github.event.label.name == 'run-benchmark'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      can_run: ${{ steps.check.outputs.can_run }}
+
+    steps:
+      - name: Check for open PRs from fork to upstream
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          
+          UPSTREAM_REPO="${{ env.UPSTREAM_REPO }}"
+          FORK_OWNER="${{ env.DATASETS_REPO }}"
+          FORK_OWNER="${FORK_OWNER%%/*}"
+          
+          # Check for open PRs from the fork to upstream
+          OPEN_PRS=$(gh pr list \
+            --repo "$UPSTREAM_REPO" \
+            --head "${FORK_OWNER}" \
+            --state open \
+            --json number,title,url \
+            --limit 1 2>/dev/null || echo "[]")
+          
+          if [ "$OPEN_PRS" != "[]" ] && [ "$OPEN_PRS" != "" ]; then
+            PR_URL=$(echo "$OPEN_PRS" | jq -r '.[0].url')
+            PR_TITLE=$(echo "$OPEN_PRS" | jq -r '.[0].title')
+            echo "pending_pr_url=${PR_URL}" >> "$GITHUB_OUTPUT"
+            echo "pending_pr_title=${PR_TITLE}" >> "$GITHUB_OUTPUT"
+            echo "can_run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "can_run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comment and block if PR pending
+        if: steps.check.outputs.can_run == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ steps.check.outputs.pending_pr_url }}
+          PR_TITLE: ${{ steps.check.outputs.pending_pr_title }}
+        run: |
+          set -euo pipefail
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+          REPO="${{ github.repository }}"
+          
+          gh issue comment "$ISSUE_NUMBER" -R "$REPO" --body "$(
+            cat <<EOF
+          ⏸️ **Benchmark run on hold**
+
+          There is an open PR from the fork that needs to be merged first:
+          - [${PR_TITLE}](${PR_URL})
+
+          Running a benchmark now would cause merge conflicts. The benchmark will automatically run when the label is re-applied after the PR is merged.
+          EOF
+          )"
+          
+          gh issue edit "$ISSUE_NUMBER" -R "$REPO" --remove-label "run-benchmark" --add-label "blocked"
+          
+          exit 1
+
+  setup:
+    needs: check-pending-pr
+    if: github.event.label.name == 'run-benchmark' && needs.check-pending-pr.outputs.can_run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -36,6 +100,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Sync home-assistant-datasets fork with upstream
+        env:
+          GH_TOKEN: ${{ secrets.HOME_ASSISTANT_DATASETS_TOKEN }}
+        run: |
+          gh repo sync "${{ env.DATASETS_REPO }}" --source "${{ env.UPSTREAM_REPO }}"
+
       - name: Checkout home-assistant-datasets
         uses: actions/checkout@v4
         with:
@@ -43,12 +113,6 @@ jobs:
           path: ${{ env.DATASETS_DIR }}
           fetch-depth: 0
           token: ${{ secrets.HOME_ASSISTANT_DATASETS_TOKEN }}
-
-      - name: Sync fork with upstream
-        env:
-          GH_TOKEN: ${{ secrets.HOME_ASSISTANT_DATASETS_TOKEN }}
-        run: |
-          gh repo sync "${{ env.DATASETS_REPO }}" --source "${{ env.UPSTREAM_REPO }}"
 
       - name: Parse model slug from issue form
         id: parse_model
@@ -321,7 +385,7 @@ jobs:
           set -euo pipefail
           
           for dir in reports-artifacts/reports-*/; do
-            rsync -a "${dir}" "${{ env.DATASETS_DIR }}/reports/"
+            rsync -a "${dir}reports/" "${{ env.DATASETS_DIR }}/reports/"
           done
 
       - name: Install uv
