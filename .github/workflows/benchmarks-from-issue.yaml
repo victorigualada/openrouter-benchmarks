@@ -263,12 +263,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - dataset: assist
-            collect_script: eval_collect_assist.sh
-            metrics_script: eval_metrics_assist.sh
-          - dataset: assist-mini
-            collect_script: eval_collect_assist.sh
-            metrics_script: eval_metrics_assist.sh
+          # - dataset: assist
+          #   collect_script: eval_collect_assist.sh
+          #   metrics_script: eval_metrics_assist.sh
+          # - dataset: assist-mini
+          #   collect_script: eval_collect_assist.sh
+          #   metrics_script: eval_metrics_assist.sh
           - dataset: questions
             collect_script: eval_collect_assist.sh
             metrics_script: eval_metrics_assist.sh
@@ -384,9 +384,27 @@ jobs:
         run: |
           set -euo pipefail
           
+          echo "=== Artifact structure after download ==="
+          find reports-artifacts -type d | head -50
+          echo ""
+          echo "=== Files in each artifact ==="
           for dir in reports-artifacts/reports-*/; do
-            rsync -a "${dir}reports/" "${{ env.DATASETS_DIR }}/reports/"
+            echo "--- ${dir} ---"
+            ls -la "${dir}" || true
           done
+          echo ""
+          echo "=== Destination before merge ==="
+          ls -la "${{ env.DATASETS_DIR }}/reports/" || true
+          echo ""
+          
+          for dir in reports-artifacts/reports-*/; do
+            echo "Syncing ${dir} -> ${{ env.DATASETS_DIR }}/reports/"
+            rsync -av "${dir}" "${{ env.DATASETS_DIR }}/reports/"
+          done
+          
+          echo ""
+          echo "=== Destination after merge ==="
+          find "${{ env.DATASETS_DIR }}/reports" -type d | head -50
 
       - name: Install uv
         if: needs.collect-metrics.result == 'success'
