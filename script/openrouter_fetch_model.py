@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """
-Fetch a single OpenRouter model record from the public "author-models" endpoint.
+Fetch a single OpenRouter model record from the public API.
 
 Given an OpenRouter model URL like:
   https://openrouter.ai/deepseek/deepseek-v3.2
 
 This script will:
   - derive the model slug (e.g. "deepseek/deepseek-v3.2")
-  - derive the authorSlug (e.g. "deepseek")
   - call:
-      https://openrouter.ai/api/frontend/author-models?authorSlug=<authorSlug>
-  - find the entry in data.models[] whose slug matches the model slug
+      https://openrouter.ai/api/v1/models/<model_slug>/endpoints
+  - use the model record plus its first (default-routed) provider endpoint
   - write a `models/<model_id>.yaml` file (silent on success)
 
 Notes:
@@ -19,6 +18,8 @@ Notes:
   - costs are derived from `endpoint.pricing.prompt` and `endpoint.pricing.completion`
     (OpenRouter reports $/token; the YAML uses $/1M tokens)
   - the YAML description uses the model's API description if available
+  - the public API does not expose a per-model rate limit, so `rpm` uses a
+    conservative default
 """
 
 from __future__ import annotations
@@ -34,7 +35,9 @@ import urllib.request
 from typing import Any
 
 
-OPENROUTER_AUTHOR_MODELS_URL = "https://openrouter.ai/api/frontend/author-models"
+OPENROUTER_MODEL_ENDPOINTS_URL = "https://openrouter.ai/api/v1/models/{model_slug}/endpoints"
+
+DEFAULT_RPM = 250
 
 
 # type: ignore[name-defined]
@@ -73,13 +76,6 @@ def _parse_slug_from_input(value: str) -> str:
     return f"{parts[0]}/{parts[1]}"
 
 
-def _author_slug_from_model_slug(model_slug: str) -> str:
-    author, _, _ = model_slug.partition("/")
-    if not author:
-        _die(f"Invalid model slug (missing author): {model_slug!r}")
-    return author
-
-
 def _model_id_from_model_slug(model_slug: str) -> str:
     model_id = model_slug.rsplit("/", 1)[-1].strip()
     if not model_id:
@@ -87,7 +83,7 @@ def _model_id_from_model_slug(model_slug: str) -> str:
     return model_id
 
 
-def _http_get_json(url: str) -> Any:
+def _http_get_json(url: str, *, not_found_message: str | None = None) -> Any:
     req = urllib.request.Request(
         url,
         headers={
@@ -100,6 +96,8 @@ def _http_get_json(url: str) -> Any:
         with urllib.request.urlopen(req, timeout=30) as resp:
             body = resp.read()
     except urllib.error.HTTPError as e:
+        if e.code == 404 and not_found_message:
+            _die(not_found_message)
         # Include a bit of body when available to help debugging.
         body = getattr(e, "read", lambda: b"")()
         snippet = body[:500].decode("utf-8", errors="replace") if body else ""
@@ -151,7 +149,12 @@ def _format_decimal_for_yaml(value: Decimal) -> str:
     return s
 
 
-def _build_model_yaml(model_id: str, model_slug: str, model_entry: dict[str, Any]) -> str:
+def _build_model_yaml(
+    model_id: str,
+    model_slug: str,
+    model_entry: dict[str, Any],
+    endpoint: dict[str, Any],
+) -> str:
     friendly_name = str(model_entry.get("short_name") or model_entry.get(
         "name") or model_slug).strip() or model_slug
 
@@ -161,13 +164,9 @@ def _build_model_yaml(model_id: str, model_slug: str, model_entry: dict[str, Any
     else:
         description = f"OpenRouter integration using {friendly_name}"
 
-    endpoint = model_entry.get("endpoint")
-    if not isinstance(endpoint, dict):
-        endpoint = {}
-
     rpm = endpoint.get("limit_rpm")
     if not isinstance(rpm, int) or rpm <= 0:
-        rpm = 250
+        rpm = DEFAULT_RPM
 
     in_cost, out_cost = _extract_cost_per_million_tokens(endpoint)
 
@@ -181,7 +180,9 @@ def _build_model_yaml(model_id: str, model_slug: str, model_entry: dict[str, Any
         "---",
         f"model_id: {model_id}",
         "domain: open_router",
-        f"description: {description}",
+        # Quoted: descriptions routinely contain ": " and other YAML-significant
+        # characters. JSON string syntax is a valid YAML double-quoted scalar.
+        f"description: {json.dumps(description)}",
         "categories:",
         "  - openrouter",
         "  - cloud",
@@ -239,38 +240,50 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     model_slug = _parse_slug_from_input(args.openrouter_model_url_or_slug)
-    author_slug = _author_slug_from_model_slug(model_slug)
     model_id = _model_id_from_model_slug(model_slug)
 
-    url = f"{OPENROUTER_AUTHOR_MODELS_URL}?{urllib.parse.urlencode({'authorSlug': author_slug})}"
-    payload = _http_get_json(url)
+    url = OPENROUTER_MODEL_ENDPOINTS_URL.format(
+        model_slug=urllib.parse.quote(model_slug, safe="/")
+    )
+    payload = _http_get_json(
+        url,
+        not_found_message=(
+            f"Model not found on OpenRouter: {model_slug!r}. "
+            "Check the slug at https://openrouter.ai/models"
+        ),
+    )
 
     data = payload.get("data") if isinstance(payload, dict) else None
-    models = data.get("models") if isinstance(data, dict) else None
-    if not isinstance(models, list):
+    if not isinstance(data, dict):
+        _die(f"Unexpected response shape from {url}: expected a data object")
+
+    endpoints = data.get("endpoints")
+    if not isinstance(endpoints, list) or not endpoints:
         _die(
-            f"Unexpected response shape from {url}: expected data.models[] list")
+            f"Model {model_slug!r} has no available provider endpoints on OpenRouter")
 
-    for entry in models:
-        if not isinstance(entry, dict):
-            continue
-        # Per requirement: match the exact slug from the model URL
-        if entry.get("slug") == model_slug:
-            if args.models_dir:
-                models_dir = Path(args.models_dir).expanduser().resolve()
-            else:
-                repo_root = Path(__file__).resolve().parents[1]
-                models_dir = repo_root / "models"
-            models_dir.mkdir(parents=True, exist_ok=True)
+    # `endpoints[0]` is OpenRouter's default-routed provider; fall back to the
+    # first endpoint that actually reports pricing.
+    endpoint = next(
+        (
+            e
+            for e in endpoints
+            if isinstance(e, dict) and isinstance(e.get("pricing"), dict)
+        ),
+        endpoints[0] if isinstance(endpoints[0], dict) else {},
+    )
 
-            out_path = models_dir / f"{model_id}.yaml"
-            yaml_text = _build_model_yaml(model_id, model_slug, entry)
-            out_path.write_text(yaml_text, encoding="utf-8")
-            return 0
+    if args.models_dir:
+        models_dir = Path(args.models_dir).expanduser().resolve()
+    else:
+        repo_root = Path(__file__).resolve().parents[1]
+        models_dir = repo_root / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
 
-    _die(
-        f"Model not found for slug {model_slug!r} under authorSlug={author_slug!r}")
-    return 2
+    out_path = models_dir / f"{model_id}.yaml"
+    yaml_text = _build_model_yaml(model_id, model_slug, data, endpoint)
+    out_path.write_text(yaml_text, encoding="utf-8")
+    return 0
 
 
 if __name__ == "__main__":
