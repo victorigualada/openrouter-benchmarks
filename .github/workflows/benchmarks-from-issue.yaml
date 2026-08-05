@@ -282,6 +282,13 @@ jobs:
         with:
           name: workspace-setup
 
+      - name: Checkout repo (for the pytest DNS plugin)
+        uses: actions/checkout@v4
+        with:
+          path: benchmarks-repo
+          sparse-checkout: |
+            script
+
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -296,7 +303,7 @@ jobs:
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
-          
+
           uv pip install -r requirements_dev.txt --prerelease=allow
           uv pip install -r requirements_eval.txt --prerelease=allow
           uv pip install "python-open-router==0.3.3"
@@ -322,6 +329,11 @@ jobs:
           SECRETS_FILE: ${{ runner.temp }}/secrets.yaml
           MODEL: ${{ needs.setup.outputs.model_id }}
           DATASET_NAME: ${{ matrix.dataset }}
+          # Home Assistant's test harness blocks DNS and non-localhost sockets,
+          # which turns every OpenRouter call into ConfigEntryNotReady.
+          # See script/allow_real_dns.py.
+          PYTHONPATH: ${{ github.workspace }}/benchmarks-repo/script
+          PYTEST_ADDOPTS: -p allow_real_dns
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
@@ -334,6 +346,8 @@ jobs:
           SYNTHETIC_HOME_DIR: ${{ github.workspace }}/home-assistant-synthetic-home/
           SECRETS_FILE: ${{ runner.temp }}/secrets.yaml
           DATASET_NAME: ${{ matrix.dataset }}
+          PYTHONPATH: ${{ github.workspace }}/benchmarks-repo/script
+          PYTEST_ADDOPTS: -p allow_real_dns
         working-directory: ${{ env.DATASETS_DIR }}
         run: |
           set -euo pipefail
