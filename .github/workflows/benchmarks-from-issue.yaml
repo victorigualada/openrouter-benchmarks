@@ -489,10 +489,22 @@ jobs:
           BASE_BRANCH="$(gh repo view "${UPSTREAM_REPO}" --json defaultBranchRef -q .defaultBranchRef.name)"
 
           BRANCH_URL="https://github.com/${ORIGIN_REPO}/tree/${BRANCH}"
-          CREATE_PR_URL="https://github.com/${UPSTREAM_REPO}/compare/${BASE_BRANCH}...${ORIGIN_OWNER}:${BRANCH}?expand=1"
 
           REPORTS_README="${{ env.DATASETS_DIR }}/reports/README.md"
           REPORT_ROW="$(grep -m 1 -F "${MODEL_ID}" "${REPORTS_README}" || true)"
+
+          PR_TITLE="Benchmark ${MODEL_SLUG}"
+          PR_BODY="$(
+            cat <<EOF
+          | Model | assist \$\${\\color{gray}\\small{\\textsf{(n=460)}}}\$\$ | assist-mini \$\${\\color{gray}\\small{\\textsf{(n=196)}}}\$\$ | questions \$\${\\color{gray}\\small{\\textsf{(n=370)}}}\$\$ | automations \$\${\\color{gray}\\small{\\textsf{(n=60)}}}\$\$ |
+          | --- | --- | --- | --- | --- |
+          ${REPORT_ROW}
+          EOF
+          )"
+
+          TITLE_ENC="$(jq -rn --arg x "$PR_TITLE" '$x|@uri')"
+          BODY_ENC="$(jq -rn --arg x "$PR_BODY" '$x|@uri')"
+          CREATE_PR_URL="https://github.com/${UPSTREAM_REPO}/compare/${BASE_BRANCH}...${ORIGIN_OWNER}:${BRANCH}?expand=1&title=${TITLE_ENC}&body=${BODY_ENC}"
 
           gh issue comment "$ISSUE_NUMBER" -R "$REPO" --body "$(
             cat <<EOF
