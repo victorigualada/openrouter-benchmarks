@@ -6,8 +6,7 @@ on:
     types: [labeled]
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
   issues: write
 
 concurrency:
@@ -99,6 +98,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Sync home-assistant-datasets fork with upstream
         env:
@@ -117,9 +117,11 @@ jobs:
       - name: Parse model slug from issue form
         id: parse_model
         shell: bash
+        env:
+          # Pass untrusted issue body through the environment, never inline via
+          # ${{ }}, to prevent shell script injection.
+          BODY: ${{ github.event.issue.body }}
         run: |
-          BODY="${{ github.event.issue.body }}"
-
           MODEL_SLUG=$(printf "%s\n" "$BODY" \
             | awk '
               /^### Model slug \(OpenRouter\)/ {found=1; next}
@@ -286,6 +288,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: benchmarks-repo
+          persist-credentials: false
           sparse-checkout: |
             script
 
@@ -374,6 +377,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Checkout home-assistant-datasets
         if: needs.collect-metrics.result == 'success'
